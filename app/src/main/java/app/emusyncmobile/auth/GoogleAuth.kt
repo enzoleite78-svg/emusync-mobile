@@ -49,12 +49,24 @@ class GoogleAuth(context: Context) : DriveClient.TokenProvider {
         runCatching { client.getAuthorizationResultFromIntent(data).accessToken != null }
             .getOrDefault(false)
 
-    override suspend fun token(): String = when (val r = authorize()) {
-        is Result.Authorized -> r.accessToken
-        is Result.NeedsConsent -> throw NotAuthorizedException()
+    @Volatile private var cachedToken: String? = null
+    @Volatile private var cachedAt = 0L
+
+    /** Reaproveita o token por alguns minutos (tokens do Google valem ~1 hora). */
+    override suspend fun token(): String {
+        val cached = cachedToken
+        if (cached != null && System.currentTimeMillis() - cachedAt < TOKEN_REUSE_MS) return cached
+        return when (val r = authorize()) {
+            is Result.Authorized -> r.accessToken
+            is Result.NeedsConsent -> throw NotAuthorizedException()
+        }.also {
+            cachedToken = it
+            cachedAt = System.currentTimeMillis()
+        }
     }
 
     override suspend fun invalidate(token: String) {
+        if (cachedToken == token) cachedToken = null
         withContext(Dispatchers.IO) {
             runCatching { GoogleAuthUtil.clearToken(appContext, token) }
         }
@@ -62,5 +74,6 @@ class GoogleAuth(context: Context) : DriveClient.TokenProvider {
 
     companion object {
         const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
+        private const val TOKEN_REUSE_MS = 10 * 60 * 1000L
     }
 }

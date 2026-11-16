@@ -16,6 +16,8 @@ import app.emusyncmobile.local.LocalGame
 import app.emusyncmobile.local.LocalStore
 import app.emusyncmobile.local.SafFolder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -59,6 +61,15 @@ class SyncEngine(
 
     /** Encontra a pasta do EmuSync, registra este celular e carrega a lista de jogos. */
     suspend fun connect(): Remote {
+        val start = System.currentTimeMillis()
+        try {
+            return connectInner()
+        } finally {
+            android.util.Log.i("EmuSyncEngine", "connect levou ${System.currentTimeMillis() - start} ms")
+        }
+    }
+
+    private suspend fun connectInner(): Remote {
         val candidates = drive.findFolders(CloudNames.DATA_FOLDER).sortedBy { it.createdTime ?: "" }
         if (candidates.isEmpty()) {
             throw SyncException("Pasta ${CloudNames.DATA_FOLDER} não encontrada no Drive. Configure o EmuSync no PC primeiro.")
@@ -72,8 +83,13 @@ class SyncEngine(
                 .mapValues { it.value.first() }
             val listFile = byName[CloudNames.GAME_LIST] ?: continue
 
-            registerDevice(byName)
-            val gameList = GameListFile.parse(drive.downloadText(listFile.id))
+            // As duas coisas ao mesmo tempo: economiza uma ida e volta ao Drive
+            val gameList = coroutineScope {
+                val register = async { registerDevice(byName) }
+                val list = async { GameListFile.parse(drive.downloadText(listFile.id)) }
+                register.await()
+                list.await()
+            }
             return Remote(folder.id, byName, gameList)
         }
         throw SyncException("Nenhuma pasta ${CloudNames.DATA_FOLDER} tem o arquivo ${CloudNames.GAME_LIST}. Adicione um jogo no EmuSync do PC primeiro.")

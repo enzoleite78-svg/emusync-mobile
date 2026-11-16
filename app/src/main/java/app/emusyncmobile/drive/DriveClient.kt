@@ -73,10 +73,30 @@ class DriveClient(
     }
 
     suspend fun updateContent(fileId: String, mimeType: String, bytes: ByteArray) =
-        resumableUpdate(fileId, mimeType, bytes.size.toLong()) { bytes.toRequestBody(mimeType.toMediaType()) }
+        update(fileId, mimeType, bytes.size.toLong()) { bytes.toRequestBody(mimeType.toMediaType()) }
 
     suspend fun updateContent(fileId: String, mimeType: String, file: File) =
-        resumableUpdate(fileId, mimeType, file.length()) { file.asRequestBody(mimeType.toMediaType()) }
+        update(fileId, mimeType, file.length()) { file.asRequestBody(mimeType.toMediaType()) }
+
+    /** Até 5 MB: upload simples (1 requisição). Acima disso: resumable (2 requisições). */
+    private suspend fun update(fileId: String, mimeType: String, length: Long, body: () -> okhttp3.RequestBody) {
+        if (length <= SIMPLE_UPLOAD_LIMIT) simpleUpdate(fileId, body) else resumableUpdate(fileId, mimeType, length, body)
+    }
+
+    private suspend fun simpleUpdate(fileId: String, body: () -> okhttp3.RequestBody) = withContext(Dispatchers.IO) {
+        val url = uploadApi.newBuilder()
+            .addPathSegment(fileId)
+            .addQueryParameter("uploadType", "media")
+            .addQueryParameter("fields", "id")
+            .build()
+        execute { token ->
+            Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $token")
+                .patch(body())
+                .build()
+        }.close()
+    }
 
     /**
      * Upload "resumable" (o upload simples é limitado a 5 MB e memory cards de PS2 têm 8 MB).
@@ -164,4 +184,9 @@ class DriveClient(
     }
 
     private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
+
+    companion object {
+        /** Limite do upload simples da API do Drive. */
+        private const val SIMPLE_UPLOAD_LIMIT = 5L * 1024 * 1024
+    }
 }
