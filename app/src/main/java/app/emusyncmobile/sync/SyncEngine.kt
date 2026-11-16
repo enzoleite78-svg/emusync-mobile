@@ -90,8 +90,13 @@ class SyncEngine(
 
     suspend fun statuses(remote: Remote): List<GameStatus> = withContext(Dispatchers.IO) {
         val state = store.load()
+        val start = System.currentTimeMillis()
         remote.gameList.games.map { game -> statusOf(remote, game, state.games[game.id]) }
             .sortedBy { it.game.name.lowercase() }
+            .also {
+                val files = it.sumOf { s -> s.scan?.fileCount ?: 0 }
+                android.util.Log.i("EmuSyncEngine", "status de ${it.size} jogos ($files arquivos) em ${System.currentTimeMillis() - start} ms")
+            }
     }
 
     private fun statusOf(remote: Remote, game: CloudGame, local: LocalGame?): GameStatus {
@@ -151,9 +156,13 @@ class SyncEngine(
     }
 
     suspend fun sync(remote: Remote, gameId: String, force: SyncAction? = null): Remote = lock.withLock {
-        syncLocked(remote, gameId, force)
+        val start = System.currentTimeMillis()
+        try {
+            syncLocked(remote, gameId, force)
+        } finally {
+            android.util.Log.i("EmuSyncEngine", "sync $gameId levou ${System.currentTimeMillis() - start} ms")
+        }
     }
-
     private suspend fun syncLocked(remote: Remote, gameId: String, force: SyncAction?): Remote = withContext(Dispatchers.IO) {
         val local = store.load().games[gameId] ?: throw SyncException("Escolha a pasta do jogo primeiro.")
         val fresh = GameListFile.parse(drive.downloadText(remote.gameListId))

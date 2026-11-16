@@ -40,10 +40,10 @@ class SafFolder(private val context: Context, val treeUri: Uri) {
         val files = listFiles(root)
         dest.parentFile?.mkdirs()
         ZipOutputStream(dest.outputStream().buffered()).use { zip ->
-            for ((entry, doc) in files) {
+            for ((entry, uri) in files) {
                 val zipEntry = ZipEntry(entry.path).apply { time = entry.lastModified }
                 zip.putNextEntry(zipEntry)
-                context.contentResolver.openInputStream(doc.uri).use { input ->
+                context.contentResolver.openInputStream(uri).use { input ->
                     input?.copyTo(zip) ?: throw IOException("Não foi possível ler ${entry.path}")
                 }
                 zip.closeEntry()
@@ -67,12 +67,14 @@ class SafFolder(private val context: Context, val treeUri: Uri) {
 
             clearContents(root)
 
+            // A pasta está vazia agora: dá para criar tudo direto, sem procurar arquivos existentes
             val dirs = HashMap<String, DocumentFile>()
             dirs[""] = root
+            val written = HashSet<String>()
             for ((entry, parts) in entries) {
+                if (!written.add(parts.joinToString("/"))) continue // entrada repetida no zip
                 val dir = ensureDir(dirs, parts.dropLast(1))
                 val name = parts.last()
-                dir.findFile(name)?.delete()
                 val target = dir.createFile("application/octet-stream", name)
                     ?: throw IOException("Não foi possível criar ${parts.joinToString("/")}")
                 context.contentResolver.openOutputStream(target.uri, "w").use { out ->
@@ -88,10 +90,9 @@ class SafFolder(private val context: Context, val treeUri: Uri) {
         var key = ""
         for (part in parts) {
             key = if (key.isEmpty()) part else "$key/$part"
+            val parent = current
             current = cache.getOrPut(key) {
-                current.findFile(part)?.takeIf { it.isDirectory }
-                    ?: current.createDirectory(part)
-                    ?: throw IOException("Não foi possível criar a pasta $key")
+                parent.createDirectory(part) ?: throw IOException("Não foi possível criar a pasta $key")
             }
         }
         return current
@@ -103,20 +104,43 @@ class SafFolder(private val context: Context, val treeUri: Uri) {
         }
     }
 
-    private fun listFiles(root: DocumentFile): List<Pair<FileEntry, DocumentFile>> {
-        val result = mutableListOf<Pair<FileEntry, DocumentFile>>()
-        fun walk(dir: DocumentFile, prefix: String) {
-            for (child in dir.listFiles()) {
-                val name = child.name ?: continue
-                val path = if (prefix.isEmpty()) name else "$prefix/$name"
-                if (child.isDirectory) {
-                    walk(child, path)
-                } else if (child.isFile) {
-                    result += FileEntry(path, child.length(), child.lastModified()) to child
+    /**
+     * Lista todos os arquivos com UMA consulta por pasta (nome, tipo, tamanho e data juntos).
+     * O DocumentFile faria uma consulta separada para cada propriedade de cada arquivo,
+     * o que deixava pastas com muitos saves bem lentas.
+     */
+    private fun listFiles(@Suppress("UNUSED_PARAMETER") root: DocumentFile): List<Pair<FileEntry, Uri>> {
+        val result = mutableListOf<Pair<FileEntry, Uri>>()
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+
+        fun walk(parentDocId: String, prefix: String) {
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+            val subdirs = mutableListOf<Pair<String, String>>()
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val docId = c.getString(0) ?: continue
+                    val name = c.getString(1) ?: continue
+                    val path = if (prefix.isEmpty()) name else "$prefix/$name"
+                    if (c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                        subdirs += docId to path
+                    } else {
+                        val size = if (c.isNull(3)) 0L else c.getLong(3)
+                        val modified = if (c.isNull(4)) 0L else c.getLong(4)
+                        val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                        result += FileEntry(path, size, modified) to uri
+                    }
                 }
-            }
+            } ?: throw IOException("Não foi possível ler a pasta. Escolha a pasta de novo.")
+            subdirs.forEach { (docId, path) -> walk(docId, path) }
         }
-        walk(root, "")
+
+        walk(DocumentsContract.getTreeDocumentId(treeUri), "")
         return result
     }
 
