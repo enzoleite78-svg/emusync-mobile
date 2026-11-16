@@ -6,6 +6,11 @@ saves de emuladores e ports entre o celular e o PC/Steam Deck pelo Google Drive.
 Ele lê e grava os mesmos arquivos que o EmuSync usa na pasta `EmuSync_Data` do seu Drive.
 Então um save feito no PC aparece no celular, e vice-versa.
 
+## Baixar
+
+Baixe o APK mais recente em **[Releases](https://github.com/enzoleite78-svg/emusync-mobile/releases/latest)**,
+direto no celular, e abra o arquivo para instalar.
+
 ## Como funciona
 
 - Os jogos são criados no **EmuSync do PC**. No celular, você escolhe a pasta de saves de cada jogo.
