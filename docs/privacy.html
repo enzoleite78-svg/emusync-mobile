@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EmuSync Mobile – Política de Privacidade</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 24px 16px; line-height: 1.6; }
+    h1 { font-size: 1.6rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    .en { opacity: .8; border-top: 1px solid #8884; margin-top: 3rem; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Política de Privacidade – EmuSync Mobile</h1>
+  <p><em>Última atualização: 16 de novembro de 2026</em></p>
+
+  <p>O EmuSync Mobile é um app Android de código aberto que sincroniza saves de jogos e emuladores
+  entre o celular e o Google Drive do próprio usuário, de forma compatível com o
+  <a href="https://github.com/emu-sync/EmuSync">EmuSync</a> para PC. Ele não tem ligação com o autor do EmuSync.</p>
+
+  <h2>Quais dados o app acessa</h2>
+  <ul>
+    <li><strong>Google Drive:</strong> o app lê e atualiza apenas os arquivos da pasta <code>EmuSync_Data</code>
+      (lista de jogos, lista de dispositivos e os arquivos .zip com os saves). Ele precisa da permissão de acesso
+      ao Drive porque essa pasta é criada pelo EmuSync de PC.</li>
+    <li><strong>Pastas do celular:</strong> somente as pastas de saves que o usuário escolhe explicitamente.</li>
+  </ul>
+
+  <h2>O que o app NÃO faz</h2>
+  <ul>
+    <li>Não envia dados para servidores do desenvolvedor. Não existe servidor: a comunicação é só entre o celular e o Google Drive do usuário.</li>
+    <li>Não coleta estatísticas, anúncios, rastreamento ou dados pessoais.</li>
+    <li>Não compartilha nem vende dados para terceiros.</li>
+    <li>Não lê, altera ou apaga arquivos do Drive fora da pasta <code>EmuSync_Data</code>.</li>
+  </ul>
+
+  <h2>Dados guardados no celular</h2>
+  <p>O app guarda, apenas na memória privada do próprio celular: o identificador do dispositivo, as pastas escolhidas,
+  informações sobre o último sync e backups dos saves. Tudo é apagado ao desinstalar o app.</p>
+
+  <h2>Uso dos dados do Google</h2>
+  <p>O uso de informações recebidas das APIs do Google segue a
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de Dados do Usuário dos Serviços de API do Google</a>,
+  incluindo os requisitos de Uso Limitado. Os dados do Drive são usados exclusivamente para sincronizar os saves do próprio usuário.</p>
+
+  <h2>Revogar o acesso</h2>
+  <p>O acesso pode ser revogado a qualquer momento em
+  <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> ou desinstalando o app.</p>
+
+  <h2>Contato</h2>
+  <p>Dúvidas: abra uma issue no <a href="https://github.com/enzoleite78-svg/emusync-mobile/issues">repositório do projeto</a>.</p>
+
+  <div class="en">
+    <h2>Summary (English)</h2>
+    <p>EmuSync Mobile is an open-source Android app that syncs game saves between the device and the user's own Google Drive,
+    compatible with EmuSync for PC. It only reads and updates files inside the <code>EmuSync_Data</code> folder and the
+    device folders the user picks. There is no developer server; no analytics, ads or tracking; no data is shared or sold.
+    Use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use
+    requirements. Access can be revoked at myaccount.google.com/permissions.</p>
+  </div>
+</body>
+</html>
