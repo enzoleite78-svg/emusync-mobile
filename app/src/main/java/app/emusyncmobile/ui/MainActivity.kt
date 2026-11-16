@@ -1,5 +1,7 @@
 package app.emusyncmobile.ui
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,6 +42,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                val notificationPermission = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { /* o sync funciona mesmo sem notificações */ }
+
                 var pickingFor by remember { mutableStateOf<String?>(null) }
                 val folderPicker = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenDocumentTree()
@@ -59,6 +65,13 @@ class MainActivity : ComponentActivity() {
                         folderPicker.launch(null)
                     },
                     onSync = viewModel::sync,
+                    onAutoSyncChange = { enabled ->
+                        if (enabled && Build.VERSION.SDK_INT >= 33) {
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        viewModel.setAutoSyncEnabled(enabled)
+                    },
+                    onGameAutoSyncChange = viewModel::setGameAutoSync,
                     onDismissMessages = viewModel::dismissMessages,
                 )
             }

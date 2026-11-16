@@ -21,6 +21,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -42,6 +43,8 @@ fun MainScreen(
     onSyncAll: () -> Unit,
     onPickFolder: (String) -> Unit,
     onSync: (String, SyncAction?) -> Unit,
+    onAutoSyncChange: (Boolean) -> Unit,
+    onGameAutoSyncChange: (String, Boolean) -> Unit,
     onDismissMessages: () -> Unit,
 ) {
     Scaffold(
@@ -73,6 +76,7 @@ fun MainScreen(
                 if (state.needsLogin) {
                     item { LoginCard(onLogin) }
                 } else if (state.games.isNotEmpty()) {
+                    item { AutoSyncCard(state.autoSyncEnabled, onAutoSyncChange) }
                     item {
                         Button(
                             onClick = onSyncAll,
@@ -87,12 +91,31 @@ fun MainScreen(
                             enabled = !state.loading,
                             onPickFolder = { onPickFolder(status.game.id) },
                             onSync = { force -> onSync(status.game.id, force) },
+                            showAutoSwitch = state.autoSyncEnabled,
+                            onAutoSyncChange = { onGameAutoSyncChange(status.game.id, it) },
                         )
                     }
                 } else if (!state.loading) {
                     item { Text("Nenhum jogo encontrado. Adicione jogos no EmuSync do PC.") }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AutoSyncCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Sync automático", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Verifica os saves a cada ~15 minutos, mesmo com o app fechado. " +
+                        "Conflitos nunca são resolvidos sozinhos: você recebe uma notificação.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onChange)
         }
     }
 }
@@ -132,6 +155,8 @@ private fun GameCard(
     enabled: Boolean,
     onPickFolder: () -> Unit,
     onSync: (SyncAction?) -> Unit,
+    showAutoSwitch: Boolean,
+    onAutoSyncChange: (Boolean) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -158,6 +183,13 @@ private fun GameCard(
                 style = MaterialTheme.typography.bodySmall,
             )
             status.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+
+            if (showAutoSwitch && status.local != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Incluir no sync automático", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Switch(checked = status.local.autoSync, onCheckedChange = onAutoSyncChange, enabled = enabled)
+                }
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onPickFolder, enabled = enabled) {

@@ -6,24 +6,22 @@ import android.content.IntentSender
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.emusyncmobile.AppServices
 import app.emusyncmobile.auth.GoogleAuth
 import app.emusyncmobile.auth.NotAuthorizedException
+import app.emusyncmobile.background.SyncWorker
 import app.emusyncmobile.core.SyncAction
-import app.emusyncmobile.drive.DriveClient
 import app.emusyncmobile.drive.DriveException
-import app.emusyncmobile.local.LocalStore
-import app.emusyncmobile.sync.BackupManager
 import app.emusyncmobile.sync.GameStatus
 import app.emusyncmobile.sync.Remote
-import app.emusyncmobile.sync.SyncEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 
 data class UiState(
     val deviceName: String = "",
+    val autoSyncEnabled: Boolean = false,
     val loading: Boolean = false,
     val needsLogin: Boolean = false,
     val consentRequest: IntentSender? = null,
@@ -34,21 +32,37 @@ data class UiState(
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
-    private val auth = GoogleAuth(app)
-    private val store = LocalStore(File(app.filesDir, "state.json"))
-    private val engine = SyncEngine(
-        context = app,
-        drive = DriveClient(auth),
-        store = store,
-        backups = BackupManager(File(app.filesDir, "game-backups")),
-    )
+    private val services = AppServices(app)
+    private val auth = services.auth
+    private val store = services.store
+    private val engine = services.engine
     private var remote: Remote? = null
 
-    private val _state = MutableStateFlow(UiState(deviceName = store.load().deviceName))
+    private val _state = MutableStateFlow(
+        store.load().let { UiState(deviceName = it.deviceName, autoSyncEnabled = it.autoSyncEnabled) }
+    )
     val state: StateFlow<UiState> = _state
 
     init {
+        if (store.load().autoSyncEnabled) SyncWorker.schedule(app)
         connect()
+    }
+
+    fun setAutoSyncEnabled(enabled: Boolean) {
+        store.update { it.copy(autoSyncEnabled = enabled) }
+        if (enabled) SyncWorker.schedule(getApplication()) else SyncWorker.cancel(getApplication())
+        _state.update {
+            it.copy(
+                autoSyncEnabled = enabled,
+                message = if (enabled) "Sync automático ligado: o celular verifica os saves a cada ~15 minutos."
+                else "Sync automático desligado.",
+            )
+        }
+    }
+
+    fun setGameAutoSync(gameId: String, enabled: Boolean) {
+        store.updateGame(gameId) { it.copy(autoSync = enabled) }
+        remote?.let { r -> launchWork { _state.update { it.copy(games = engine.statuses(r)) } } }
     }
 
     fun login() {

@@ -16,6 +16,8 @@ data class LocalGame(
     val displayPath: String,
     val cloudLatestWrite: String? = null,
     val localFingerprint: String? = null,
+    /** Incluir este jogo no sync automático em segundo plano. */
+    val autoSync: Boolean = true,
 ) {
     val lastSync: LastSync get() = LastSync(cloudLatestWrite, localFingerprint)
 }
@@ -27,6 +29,8 @@ data class LocalState(
     val deviceName: String,
     val games: Map<String, LocalGame> = emptyMap(),
     val maxBackups: Int = 10,
+    /** Sync automático em segundo plano (WorkManager) ligado. */
+    val autoSyncEnabled: Boolean = false,
 )
 
 /** Estado local guardado num JSON dentro da pasta privada do app. */

@@ -16,10 +16,19 @@ import app.emusyncmobile.local.LocalGame
 import app.emusyncmobile.local.LocalStore
 import app.emusyncmobile.local.SafFolder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class SyncException(message: String) : Exception(message)
+
+/** Resultado de uma rodada de sync automático. */
+data class AutoSyncResult(
+    val synced: List<String> = emptyList(),
+    val conflicts: List<String> = emptyList(),
+    val failures: List<String> = emptyList(),
+)
 
 data class GameStatus(
     val game: CloudGame,
@@ -110,7 +119,40 @@ class SyncEngine(
      * Sincroniza um jogo. [force] resolve conflitos: UPLOAD mantém o save do celular,
      * DOWNLOAD mantém o da nuvem.
      */
-    suspend fun sync(remote: Remote, gameId: String, force: SyncAction? = null): Remote = withContext(Dispatchers.IO) {
+    /**
+     * Sync automático: só jogos com pasta definida e autoSync ligado, e só quando a ação
+     * é óbvia (enviar ou baixar). Conflitos nunca são resolvidos sozinhos.
+     */
+    suspend fun autoSync(remote: Remote): AutoSyncResult {
+        var current = remote
+        val synced = mutableListOf<String>()
+        val conflicts = mutableListOf<String>()
+        val failures = mutableListOf<String>()
+        val localGames = store.load().games
+
+        for (status in statuses(current)) {
+            val local = localGames[status.game.id] ?: continue
+            if (!local.autoSync) continue
+            when (status.action) {
+                SyncAction.UPLOAD, SyncAction.DOWNLOAD -> try {
+                    current = sync(current, status.game.id)
+                    synced += status.game.name
+                } catch (e: Exception) {
+                    failures += "${status.game.name}: ${e.message}"
+                }
+                SyncAction.CONFLICT -> conflicts += status.game.name
+                else -> {}
+            }
+            status.error?.let { failures += "${status.game.name}: $it" }
+        }
+        return AutoSyncResult(synced, conflicts, failures)
+    }
+
+    suspend fun sync(remote: Remote, gameId: String, force: SyncAction? = null): Remote = lock.withLock {
+        syncLocked(remote, gameId, force)
+    }
+
+    private suspend fun syncLocked(remote: Remote, gameId: String, force: SyncAction?): Remote = withContext(Dispatchers.IO) {
         val local = store.load().games[gameId] ?: throw SyncException("Escolha a pasta do jogo primeiro.")
         val fresh = GameListFile.parse(drive.downloadText(remote.gameListId))
         val game = fresh.find(gameId) ?: throw SyncException("Este jogo foi removido no EmuSync do PC.")
@@ -167,6 +209,11 @@ class SyncEngine(
         } finally {
             temp.delete()
         }
+    }
+
+    companion object {
+        /** Impede que o app e o sync em segundo plano mexam nos saves ao mesmo tempo. */
+        private val lock = Mutex()
     }
 
     /** Lê game-list.json de novo, altera só um jogo e grava (preservando o resto). */
