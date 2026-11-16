@@ -1,9 +1,9 @@
 # Configurar o Google Cloud (uma vez só)
 
 > **Status (16/11/2026): já configurado** no projeto `emusync-mobile`: API do Drive ativada,
-> escopo `drive` adicionado, cliente Android criado e a sua conta adicionada como usuária de teste.
-> O app ficou no modo **Teste** (publicar exige página inicial e política de privacidade públicas),
-> então o login expira a cada 7 dias: basta tocar em "Entrar com Google" de novo.
+> escopo `drive` adicionado, cliente Android criado e app **publicado (em produção, não verificado)**.
+> Página inicial e política de privacidade: <https://enzoleite78-svg.github.io/emusync-mobile/>
+> (pasta `docs/`, publicada pelo GitHub Pages). O login não expira mais a cada 7 dias.
 
 O app precisa de um projeto seu no Google Cloud para poder acessar o seu Google Drive.
 Não precisa colar nenhuma chave no código: o Google reconhece o app pelo **nome do pacote**
