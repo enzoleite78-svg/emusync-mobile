@@ -1,0 +1,11 @@
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+captures/
+.DS_Store
+# cópia do código original do EmuSync usada só para análise
+upstream/
