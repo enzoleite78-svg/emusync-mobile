@@ -24,6 +24,11 @@ import androidx.compose.runtime.setValue
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.onAppForeground()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

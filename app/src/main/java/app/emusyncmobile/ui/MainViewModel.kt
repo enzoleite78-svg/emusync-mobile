@@ -49,9 +49,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     )
     val state: StateFlow<UiState> = _state
 
+    private var lastOpenSync = 0L
+
     init {
         if (store.load().autoSyncEnabled) SyncWorker.schedule(app)
-        connect()
+        // A primeira sincronização acontece em onAppForeground (chamado quando a tela aparece)
+    }
+
+    /**
+     * Chamado sempre que o app volta para a tela: conecta e já envia/baixa o que for óbvio.
+     * Conflitos nunca são resolvidos sozinhos. Ignora se acabou de rodar (menos de 30 s).
+     */
+    fun onAppForeground(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastOpenSync < OPEN_SYNC_COOLDOWN_MS) return
+        if (_state.value.loading) return
+        lastOpenSync = now
+        launchWork {
+            val r = engine.connect()
+            remote = r
+            val result = engine.autoSync(r)
+            val text = buildList {
+                if (result.synced.isNotEmpty()) add("Sincronizado ao abrir: ${result.synced.joinToString(", ")}.")
+                if (result.conflicts.isNotEmpty()) add("Conflito em: ${result.conflicts.joinToString(", ")}. Escolha qual save manter.")
+            }.joinToString("\n").ifEmpty { null }
+            _state.update {
+                it.copy(
+                    needsLogin = false,
+                    games = engine.statuses(r),
+                    message = text,
+                    error = result.failures.takeIf { f -> f.isNotEmpty() }?.joinToString("\n"),
+                )
+            }
+        }
     }
 
     fun setAutoSyncEnabled(enabled: Boolean) {
@@ -76,7 +106,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { auth.authorize() }
                 .onSuccess { result ->
                     when (result) {
-                        is GoogleAuth.Result.Authorized -> connect()
+                        is GoogleAuth.Result.Authorized -> onAppForeground(force = true)
                         is GoogleAuth.Result.NeedsConsent ->
                             _state.update { it.copy(consentRequest = result.intentSender) }
                     }
@@ -87,7 +117,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onConsentResult(data: Intent?) {
         _state.update { it.copy(consentRequest = null) }
-        if (auth.handleConsentResult(data)) connect()
+        if (auth.handleConsentResult(data)) onAppForeground(force = true)
         else _state.update { it.copy(needsLogin = true, error = "Login cancelado ou recusado.") }
     }
 
@@ -164,6 +194,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissMessages() = _state.update { it.copy(message = null, error = null) }
 
     private fun requireRemote(): Remote = remote ?: error("Ainda não conectado ao Google Drive.")
+
+    private companion object {
+        const val OPEN_SYNC_COOLDOWN_MS = 30_000L
+    }
 
     private fun launchWork(gameId: String? = null, block: suspend () -> Unit) {
         viewModelScope.launch {
