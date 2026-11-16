@@ -36,6 +36,7 @@ data class GameStatus(
     val action: SyncAction,
     val scan: LocalScan?,
     val error: String? = null,
+    val backupCount: Int = 0,
 )
 
 /** Estado da pasta EmuSync_Data no Drive. */
@@ -95,12 +96,13 @@ class SyncEngine(
 
     private fun statusOf(remote: Remote, game: CloudGame, local: LocalGame?): GameStatus {
         if (local == null) return GameStatus(game, null, SyncAction.NO_FOLDER, null)
+        val backupCount = backups.count(game.id)
         return try {
             val scan = SafFolder(context, Uri.parse(local.folderUri)).scan()
             val action = SyncDecider.decide(game, remote.zipFor(game.id) != null, scan, local.lastSync)
-            GameStatus(game, local, action, scan)
+            GameStatus(game, local, action, scan, backupCount = backupCount)
         } catch (e: Exception) {
-            GameStatus(game, local, SyncAction.NO_FOLDER, null, e.message ?: e.toString())
+            GameStatus(game, local, SyncAction.NO_FOLDER, null, e.message ?: e.toString(), backupCount)
         }
     }
 
@@ -209,6 +211,38 @@ class SyncEngine(
         } finally {
             temp.delete()
         }
+    }
+
+    fun backups(gameId: String): List<BackupInfo> = backups.details(gameId)
+
+    fun backupCount(gameId: String): Int = backups.count(gameId)
+
+    /**
+     * Restaura um backup na pasta do celular e envia para a nuvem (igual ao EmuSync de PC).
+     * Antes, guarda um backup do save atual, para a restauração também poder ser desfeita.
+     */
+    suspend fun restoreBackup(remote: Remote, gameId: String, backup: File): Remote = lock.withLock {
+        withContext(Dispatchers.IO) {
+            val local = store.load().games[gameId] ?: throw SyncException("Escolha a pasta do jogo primeiro.")
+            if (!backup.exists()) throw SyncException("Esse backup não existe mais.")
+            val folder = SafFolder(context, Uri.parse(local.folderUri))
+
+            // Copia antes: criar o backup do save atual pode apagar o mais antigo (que pode ser este)
+            val temp = File(tempDir, "$gameId-restore.zip")
+            temp.parentFile?.mkdirs()
+            backup.copyTo(temp, overwrite = true)
+            try {
+                backups.create(gameId, folder, store.load().maxBackups)
+                folder.replaceContentsWith(temp)
+            } finally {
+                temp.delete()
+            }
+        }
+
+        // Envia o save restaurado, se o jogo já existir na nuvem
+        val fresh = remote.copy(gameList = GameListFile.parse(drive.downloadText(remote.gameListId)))
+        if (fresh.zipFor(gameId) == null) return@withLock fresh
+        syncLocked(fresh, gameId, SyncAction.UPLOAD)
     }
 
     companion object {

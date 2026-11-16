@@ -72,6 +72,9 @@ class MainActivity : ComponentActivity() {
                         viewModel.setAutoSyncEnabled(enabled)
                     },
                     onGameAutoSyncChange = viewModel::setGameAutoSync,
+                    onOpenBackups = viewModel::openBackups,
+                    onCloseBackups = viewModel::closeBackups,
+                    onRestoreBackup = viewModel::restoreBackup,
                     onDismissMessages = viewModel::dismissMessages,
                 )
             }

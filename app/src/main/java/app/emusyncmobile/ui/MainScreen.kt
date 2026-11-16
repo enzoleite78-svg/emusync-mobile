@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,13 +27,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.emusyncmobile.core.SyncAction
+import app.emusyncmobile.sync.BackupInfo
 import app.emusyncmobile.sync.GameStatus
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,8 +54,19 @@ fun MainScreen(
     onSync: (String, SyncAction?) -> Unit,
     onAutoSyncChange: (Boolean) -> Unit,
     onGameAutoSyncChange: (String, Boolean) -> Unit,
+    onOpenBackups: (String) -> Unit,
+    onCloseBackups: () -> Unit,
+    onRestoreBackup: (String, BackupInfo) -> Unit,
     onDismissMessages: () -> Unit,
 ) {
+    state.backupDialog?.let { dialog ->
+        BackupsDialog(
+            dialog = dialog,
+            onDismiss = onCloseBackups,
+            onRestore = { backup -> onRestoreBackup(dialog.gameId, backup) },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -93,6 +113,7 @@ fun MainScreen(
                             onSync = { force -> onSync(status.game.id, force) },
                             showAutoSwitch = state.autoSyncEnabled,
                             onAutoSyncChange = { onGameAutoSyncChange(status.game.id, it) },
+                            onOpenBackups = { onOpenBackups(status.game.id) },
                         )
                     }
                 } else if (!state.loading) {
@@ -157,6 +178,7 @@ private fun GameCard(
     onSync: (SyncAction?) -> Unit,
     showAutoSwitch: Boolean,
     onAutoSyncChange: (Boolean) -> Unit,
+    onOpenBackups: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -201,6 +223,11 @@ private fun GameCard(
                     else -> {}
                 }
             }
+            if (status.local != null && status.backupCount > 0) {
+                TextButton(onClick = onOpenBackups, enabled = enabled) {
+                    Text("Backups (${status.backupCount})")
+                }
+            }
 
             if (status.action == SyncAction.CONFLICT) {
                 Text(
@@ -217,6 +244,63 @@ private fun GameCard(
         }
     }
 }
+
+@Composable
+private fun BackupsDialog(
+    dialog: BackupDialog,
+    onDismiss: () -> Unit,
+    onRestore: (BackupInfo) -> Unit,
+) {
+    var confirm by remember { mutableStateOf<BackupInfo?>(null) }
+    val pending = confirm
+
+    if (pending != null) {
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text("Restaurar este backup?") },
+            text = {
+                Text(
+                    "O save de ${dialog.gameName} no celular será substituído pelo backup de " +
+                        "${formatDate(pending.createdAtMillis)} e enviado para a nuvem (o PC vai baixar).\n\n" +
+                        "O save atual não se perde: ele vira um novo backup antes da restauração."
+                )
+            },
+            confirmButton = { Button(onClick = { onRestore(pending) }) { Text("Restaurar") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancelar") } },
+        )
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Backups – ${dialog.gameName}") },
+        text = {
+            if (dialog.backups.isEmpty()) {
+                Text("Nenhum backup ainda. O app cria um automaticamente antes de cada download.")
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(dialog.backups, key = { it.file.name }) { backup ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(formatDate(backup.createdAtMillis), style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "${backup.fileCount} arquivos · ${formatBytes(backup.sizeBytes)} (compactado)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            TextButton(onClick = { confirm = backup }) { Text("Restaurar") }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+    )
+}
+
+private val dateFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR"))
+
+private fun formatDate(millis: Long): String = dateFormat.format(Date(millis))
 
 @Composable
 private fun describe(action: SyncAction): Pair<String, Color> {

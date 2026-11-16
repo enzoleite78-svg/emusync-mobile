@@ -12,8 +12,11 @@ import app.emusyncmobile.auth.NotAuthorizedException
 import app.emusyncmobile.background.SyncWorker
 import app.emusyncmobile.core.SyncAction
 import app.emusyncmobile.drive.DriveException
+import app.emusyncmobile.sync.BackupInfo
 import app.emusyncmobile.sync.GameStatus
 import app.emusyncmobile.sync.Remote
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -29,7 +32,10 @@ data class UiState(
     val busyGameId: String? = null,
     val message: String? = null,
     val error: String? = null,
+    val backupDialog: BackupDialog? = null,
 )
+
+data class BackupDialog(val gameId: String, val gameName: String, val backups: List<BackupInfo>)
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val services = AppServices(app)
@@ -128,6 +134,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 message = if (pending.isEmpty()) "Nada para sincronizar." else "${pending.size - failures.size} de ${pending.size} sincronizados.",
                 error = failures.takeIf { f -> f.isNotEmpty() }?.joinToString("\n"),
             )
+        }
+    }
+
+    fun openBackups(gameId: String) {
+        val game = _state.value.games.firstOrNull { it.game.id == gameId } ?: return
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { engine.backups(gameId) }
+            _state.update { it.copy(backupDialog = BackupDialog(gameId, game.game.name, list)) }
+        }
+    }
+
+    fun closeBackups() = _state.update { it.copy(backupDialog = null) }
+
+    fun restoreBackup(gameId: String, backup: BackupInfo) {
+        _state.update { it.copy(backupDialog = null) }
+        launchWork(gameId) {
+            val r = engine.restoreBackup(requireRemote(), gameId, backup.file)
+            remote = r
+            _state.update {
+                it.copy(
+                    games = engine.statuses(r),
+                    message = "Backup restaurado. O save anterior foi guardado como um novo backup.",
+                )
+            }
         }
     }
 
