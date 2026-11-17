@@ -13,6 +13,8 @@ enum class SyncAction {
     CONFLICT,
     /** Nenhuma pasta escolhida neste celular. */
     NO_FOLDER,
+    /** A pasta escolhida sumiu ou ficou inacessível (apagada, movida pelo emulador, permissão perdida). */
+    FOLDER_MISSING,
     /** O jogo ainda não tem zip na nuvem: o primeiro envio precisa sair do PC/Deck. */
     NEEDS_PC_FIRST,
     /** Nada para sincronizar (sem saves em nenhum dos lados). */
@@ -65,6 +67,8 @@ object SyncDecider {
         last: LastSync?,
     ): SyncAction {
         if (scan == null) return SyncAction.NO_FOLDER
+        // Pasta sumiu: nunca tratar como "save vazio" (enviar isso apagaria o save da nuvem)
+        if (!scan.folderExists) return SyncAction.FOLDER_MISSING
 
         if (!zipExistsInCloud) {
             return if (scan.hasFiles) SyncAction.NEEDS_PC_FIRST else SyncAction.NOTHING_TO_DO

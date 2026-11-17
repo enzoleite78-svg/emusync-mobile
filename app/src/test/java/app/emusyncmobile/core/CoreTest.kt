@@ -124,4 +124,12 @@ class SyncDeciderTest {
 
     @Test fun `pasta local esvaziada nunca envia sozinha`() =
         assertEquals(SyncAction.CONFLICT, SyncDecider.decide(game(t1), true, empty, LastSync(t1, scan.fingerprint)))
+
+    // Caso real: o emulador moveu a pasta de saves e a antiga sumiu. Antes isso virava "conflito"
+    // e "Manter do celular" tentava enviar uma pasta vazia por cima da nuvem.
+    @Test fun `pasta sumida nao vira conflito nem envio`() {
+        assertEquals(SyncAction.FOLDER_MISSING, SyncDecider.decide(game(t2), true, LocalScan.MISSING, LastSync(t1, scan.fingerprint)))
+        assertEquals(SyncAction.FOLDER_MISSING, SyncDecider.decide(game(t1), true, LocalScan.MISSING, null))
+        assertEquals(SyncAction.FOLDER_MISSING, SyncDecider.decide(game(null), false, LocalScan.MISSING, null))
+    }
 }

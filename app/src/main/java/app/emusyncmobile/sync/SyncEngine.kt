@@ -164,6 +164,7 @@ class SyncEngine(
                     failures += "${status.game.name}: ${e.message}"
                 }
                 SyncAction.CONFLICT -> conflicts += status.game.name
+                SyncAction.FOLDER_MISSING -> failures += "${status.game.name}: a pasta de saves sumiu do celular. Abra o app e use \"Trocar pasta\"."
                 else -> {}
             }
             status.error?.let { failures += "${status.game.name}: $it" }
@@ -186,7 +187,10 @@ class SyncEngine(
         val current = remote.copy(gameList = fresh)
 
         val folder = SafFolder(context, Uri.parse(local.folderUri))
-        val action = force ?: SyncDecider.decide(game, current.zipFor(gameId) != null, folder.scan(), local.lastSync)
+        val scan = folder.scan()
+        // Vale até para "Manter do celular": pasta sumida não é um save, e enviá-la apagaria a nuvem
+        if (!scan.folderExists) throw SyncException(FOLDER_MISSING_MESSAGE)
+        val action = force ?: SyncDecider.decide(game, current.zipFor(gameId) != null, scan, local.lastSync)
 
         when (action) {
             SyncAction.UPLOAD -> upload(current, game, folder)
@@ -206,6 +210,11 @@ class SyncEngine(
         val temp = File(tempDir, "${game.id}-upload.zip")
         try {
             val scan = folder.zipTo(temp)
+            // Nunca substituir um save da nuvem por uma pasta vazia
+            if (!scan.hasFiles && game.storageBytes > 0) throw SyncException(
+                "A pasta do celular está vazia. Para não apagar o save da nuvem, nada foi enviado. " +
+                    "Confira se o emulador não trocou a pasta de saves e use \"Trocar pasta\"."
+            )
             drive.updateContent(zipId, "application/zip", temp)
 
             // Grava "agora" em lwt: assim o PC sempre vê a nuvem como mais nova e baixa
@@ -273,6 +282,10 @@ class SyncEngine(
     companion object {
         /** Impede que o app e o sync em segundo plano mexam nos saves ao mesmo tempo. */
         private val lock = Mutex()
+
+        const val FOLDER_MISSING_MESSAGE =
+            "A pasta deste jogo não existe mais no celular (o emulador pode ter mudado o lugar dos saves). " +
+                "Toque em \"Trocar pasta\" e escolha a pasta nova. Nada foi enviado nem apagado."
     }
 
     /** Lê game-list.json de novo, altera só um jogo e grava (preservando o resto). */

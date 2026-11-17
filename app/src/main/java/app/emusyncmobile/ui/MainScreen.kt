@@ -201,9 +201,17 @@ private fun GameCard(
             )
             Text(
                 "Nuvem: ${formatBytes(status.game.storageBytes)}" +
-                    (status.scan?.let { " · Celular: ${formatBytes(it.totalBytes)} (${it.fileCount} arquivos)" } ?: ""),
+                    (status.scan?.takeIf { it.folderExists }?.let { " · Celular: ${formatBytes(it.totalBytes)} (${it.fileCount} arquivos)" } ?: ""),
                 style = MaterialTheme.typography.bodySmall,
             )
+            if (status.action == SyncAction.FOLDER_MISSING) {
+                Text(
+                    "Essa pasta não existe mais (o emulador pode ter mudado o lugar dos saves). " +
+                        "Toque em \"Trocar pasta\" e escolha a pasta nova. Nada foi enviado nem apagado.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             status.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
             if (showAutoSwitch && status.local != null) {
@@ -311,6 +319,7 @@ private fun describe(action: SyncAction): Pair<String, Color> {
         SyncAction.DOWNLOAD -> "↓ Save da nuvem é mais novo (baixar)" to c.tertiary
         SyncAction.CONFLICT -> "⚠ Conflito" to c.error
         SyncAction.NO_FOLDER -> "Escolha a pasta de saves deste jogo" to c.onSurfaceVariant
+        SyncAction.FOLDER_MISSING -> "⚠ Pasta não encontrada no celular" to c.error
         SyncAction.NEEDS_PC_FIRST -> "Sincronize este jogo uma vez pelo PC primeiro" to c.error
         SyncAction.NOTHING_TO_DO -> "Sem saves ainda" to c.onSurfaceVariant
     }
